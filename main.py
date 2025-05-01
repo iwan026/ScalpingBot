@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import time
 import MetaTrader5 as mt5
 from datetime import datetime
@@ -63,9 +62,9 @@ class ScalpingBot:
         return True
     
     def run(self):
-        print(f"Memulai ScalpingBot untuk {len(settings.SYMBOLS)} pair")
-        print(f"Timeframe: {settings.TIMEFRAME}")
-        print(f"Risk Management: SL={settings.STOP_LOSS_PIPS}pips | TP={settings.TAKE_PROFIT_PIPS}pips")
+        print(f"Memulai ScalpingBot (Min. 3 Konfirmasi Indikator)")
+        print(f"Pair: {', '.join(settings.SYMBOLS)} | TF: {settings.TIMEFRAME}")
+        print(f"Risk: SL={settings.STOP_LOSS_PIPS}pips | TP={settings.TAKE_PROFIT_PIPS}pips\n")
         
         while True:
             try:
@@ -75,20 +74,20 @@ class ScalpingBot:
                 
                 for symbol in settings.SYMBOLS:
                     try:
-                        # Dapatkan data indikator
                         indicators = self.check_market_conditions(symbol)
                         if not indicators:
                             continue
                             
-                        # Evaluasi kondisi entry
-                        entry_checker = EntryConditions(symbol)
-                        signal = entry_checker.check_conditions(indicators)
+                        signal = EntryConditions(symbol).check_conditions(indicators)
                         
-                        # Eksekusi jika ada sinyal valid
-                        if signal.direction and symbol not in self.active_trades:
-                            print(f"\n🚨 Sinyal {signal.direction.upper()} untuk {symbol}")
-                            print(f"Alasan: {', '.join(signal.reasons)}")
-                            print(f"Confidence: {signal.confidence:.0%}")
+                        if signal.direction and len(signal.reasons) >= 3:
+                            print(f"\n{'='*40}")
+                            print(f"🚨 SIGNAL {signal.direction.upper()} {symbol}")
+                            print(f"📊 Price: {signal.entry_price:.5f}")
+                            print(f"🔍 Alasan ({len(signal.reasons)}/3):")
+                            for reason in signal.reasons:
+                                print(f" - {reason}")
+                            print(f"💎 Confidence: {signal.confidence:.0%}")
                             
                             # Eksekusi order
                             result = self.mt5.send_order(
@@ -105,21 +104,20 @@ class ScalpingBot:
                                     'time': datetime.now()
                                 }
                                 self.notifier.send_signal(signal)
-                                
+                        
                     except Exception as e:
-                        print(f"Error processing {symbol}: {str(e)}")
+                        print(f"\n⚠️ Error processing {symbol}: {str(e)}")
                         continue
                 
-                # Hitung waktu tunggu untuk candle berikutnya
                 time_left = 60 - (time.time() % 60)
-                print(f"\rMenunggu candle berikutnya dalam {time_left:.1f} detik", end="")
-                time.sleep(time_left)
+                print(f"\r⏳ Next candle in {time_left:.1f}s", end="", flush=True)
+                time.sleep(max(0.1, time_left))
                 
             except KeyboardInterrupt:
-                print("\nMenghentikan bot...")
+                print("\n🛑 Bot dihentikan manual")
                 break
             except Exception as e:
-                print(f"Critical error: {str(e)}")
+                print(f"\n‼️ Critical error: {str(e)}")
                 time.sleep(60)
 
 if __name__ == "__main__":

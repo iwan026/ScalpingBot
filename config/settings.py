@@ -1,4 +1,4 @@
-SYMBOLS = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"]
+SYMBOLS = ["EURUSD", "EURJPY", "GBPJPY", "USDJPY", "GBPUSD"]
 TIMEFRAME = "M1"
 LOT_SIZE = 0.01
 MAX_TRADES = 10
@@ -35,14 +35,14 @@ INDICATOR_CONFIG = {
 }
 
 TELEGRAM = {
-    "token": "YOUR_BOT_TOKEN",
-    "chat_id": "YOUR_CHAT_ID",
+    "token": "7667262262:AAGgQBRaC3kFoLSYFf6Q9P8ytsttrTfdzl0",
+    "chat_id": "1198920849",
     "timeout": 10
 }
 
 MT5 = {
-    "login": 123456,
-    "server": "HFMarkets-Demo",
-    "password": "your_password",
+    "login": 48804718,
+    "server": "HFMarketsGlobal-Demo",
+    "password": "123@Demo",
     "timeout": 5000
 }
