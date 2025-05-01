@@ -1,34 +1,57 @@
-import MetaTrader5 as mt5
-import pandas as pd
+from .base import BaseIndicator, IndicatorResult
+import numpy as np
 
-def detect_pinbar(symbol, timeframe, lookback=20):
-    rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, lookback)
-    df = pd.DataFrame(rates)
-    
-    pinbars = []
-    
-    for i in range(len(df)):
-        candle = df.iloc[i]
-        body_size = abs(candle['close'] - candle['open'])
-        upper_wick = candle['high'] - max(candle['open'], candle['close'])
-        lower_wick = min(candle['open'], candle['close']) - candle['low']
+class PriceActionIndicator(BaseIndicator):
+    def calculate(self):
+        df = self.get_data(20)
+        patterns = {
+            "pinbar": self._detect_pinbar(df),
+            "engulfing": self._detect_engulfing(df)
+        }
         
-        # Bullish Pin Bar (Lower Shadow > 2*Body and Upper Shadow small)
+        return IndicatorResult(
+            symbol=self.symbol,
+            timeframe=self.timeframe,
+            values=patterns,
+            timestamp=df['time'].iloc[-1],
+            is_valid=any(patterns.values())
+        )
+    
+    def _detect_pinbar(self, df):
+        last_candle = df.iloc[-1]
+        body_size = abs(last_candle['close'] - last_candle['open'])
+        upper_wick = last_candle['high'] - max(last_candle['open'], last_candle['close'])
+        lower_wick = min(last_candle['open'], last_candle['close']) - last_candle['low']
+        
+        # Bullish Pin Bar
         if lower_wick > 2 * body_size and upper_wick < body_size:
-            pinbars.append({
-                'type': 'bullish',
-                'time': pd.to_datetime(candle['time'], unit='s'),
-                'price': candle['low'],
-                'body_size': body_size
-            })
+            return {"type": "bullish", "confidence": min(lower_wick/body_size, 3)}
         
-        # Bearish Pin Bar (Upper Shadow > 2*Body and Lower Shadow small)
+        # Bearish Pin Bar
         elif upper_wick > 2 * body_size and lower_wick < body_size:
-            pinbars.append({
-                'type': 'bearish',
-                'time': pd.to_datetime(candle['time'], unit='s'),
-                'price': candle['high'],
-                'body_size': body_size
-            })
+            return {"type": "bearish", "confidence": min(upper_wick/body_size, 3)}
+        
+        return None
     
-    return pinbars
+    def _detect_engulfing(self, df):
+        if len(df) < 3:
+            return None
+            
+        last_candle = df.iloc[-1]
+        prev_candle = df.iloc[-2]
+        
+        # Bullish Engulfing
+        if (last_candle['close'] > last_candle['open'] and 
+            prev_candle['close'] < prev_candle['open'] and
+            last_candle['open'] < prev_candle['close'] and 
+            last_candle['close'] > prev_candle['open']):
+            return {"type": "bullish", "size": last_candle['close'] - last_candle['open']}
+        
+        # Bearish Engulfing
+        elif (last_candle['close'] < last_candle['open'] and 
+              prev_candle['close'] > prev_candle['open'] and
+              last_candle['open'] > prev_candle['close'] and 
+              last_candle['close'] < prev_candle['open']):
+            return {"type": "bearish", "size": last_candle['open'] - last_candle['close']}
+        
+        return None

@@ -1,39 +1,53 @@
-import MetaTrader5 as mt5
-import pandas as pd
+from .base import BaseIndicator, IndicatorResult
+import numpy as np
 
-def detect_fvg_with_volume(symbol, timeframe, lookback=30):
-    rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, lookback)
-    df = pd.DataFrame(rates)
+class FVGIndicator(BaseIndicator):
+    def load_config(self):
+        from config import settings
+        return settings.INDICATOR_CONFIG["FVG"]
     
-    fvg_list = []
-    
-    # Normalisasi volume
-    df['volume_norm'] = (df['real_volume'] - df['real_volume'].mean()) / df['real_volume'].std()
-    
-    for i in range(1, len(df)-1):
-        prev_low = df['low'].iloc[i-1]
-        prev_high = df['high'].iloc[i-1]
-        current_low = df['low'].iloc[i]
-        current_high = df['high'].iloc[i]
+    def calculate(self):
+        df = self.get_data(self.config["lookback"])
+        df['volume_norm'] = (df['real_volume'] - df['real_volume'].mean()) / df['real_volume'].std()
         
-        # Bullish FVG (gap di bawah)
-        if current_low > prev_high and df['volume_norm'].iloc[i] > 1.0:
-            fvg_list.append({
-                'type': 'bullish',
-                'high': prev_high,
-                'low': current_low,
-                'time': pd.to_datetime(df['time'].iloc[i], unit='s'),
-                'volume': df['real_volume'].iloc[i]
-            })
+        fvg_list = []
+        for i in range(1, len(df)):
+            # Bullish FVG (gap di bawah)
+            if df['low'].iloc[i] > df['high'].iloc[i-1] and df['volume_norm'].iloc[i] > self.config["volume_threshold"]:
+                fvg_list.append({
+                    'type': 'bullish',
+                    'high': df['high'].iloc[i-1],
+                    'low': df['low'].iloc[i],
+                    'time': df['time'].iloc[i]
+                })
+            
+            # Bearish FVG (gap di atas)
+            elif df['high'].iloc[i] < df['low'].iloc[i-1] and df['volume_norm'].iloc[i] > self.config["volume_threshold"]:
+                fvg_list.append({
+                    'type': 'bearish',
+                    'high': df['high'].iloc[i],
+                    'low': df['low'].iloc[i-1],
+                    'time': df['time'].iloc[i]
+                })
         
-        # Bearish FVG (gap di atas)
-        elif current_high < prev_low and df['volume_norm'].iloc[i] > 1.0:
-            fvg_list.append({
-                'type': 'bearish',
-                'high': current_high,
-                'low': prev_low,
-                'time': pd.to_datetime(df['time'].iloc[i], unit='s'),
-                'volume': df['real_volume'].iloc[i]
-            })
+        return IndicatorResult(
+            symbol=self.symbol,
+            timeframe=self.timeframe,
+            values={
+                "fgv_list": fvg_list,
+                "current_fvg": self._get_current_fvg(df, fvg_list)
+            },
+            timestamp=df['time'].iloc[-1],
+            is_valid=len(fvg_list) > 0
+        )
     
-    return fvg_list
+    def _get_current_fvg(self, df, fvg_list):
+        """Cek apakah harga saat ini berada di area FVG"""
+        if not fvg_list:
+            return None
+            
+        last_candle = df.iloc[-1]
+        for fvg in fvg_list[-3:]:  # Cek 3 FVG terakhir
+            if fvg['low'] <= last_candle['close'] <= fvg['high']:
+                return fvg
+        return None
